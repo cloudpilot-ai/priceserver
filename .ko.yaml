@@ -1,0 +1,14 @@
+defaultPlatforms:
+  - linux/arm64
+  - linux/amd64
+builds:
+- id: priceserver
+  dir: .  # default is .
+  main: ./cmd
+  ldflags:
+  - -s -w
+  - -extldflags "-static"
+  - -X github.com/cloudpilot-ai/priceserver/pkg/version.gitVersion={{ .Env.GIT_VERSION }}
+  - -X github.com/cloudpilot-ai/priceserver/pkg/version.gitCommit={{ .Env.GIT_COMMIT }}
+  - -X github.com/cloudpilot-ai/priceserver/pkg/version.gitTreeState={{ .Env.GIT_TREE_STATE }}
+  - -X github.com/cloudpilot-ai/priceserver/pkg/version.buildData={{ .Env.BUILD_DATE }}

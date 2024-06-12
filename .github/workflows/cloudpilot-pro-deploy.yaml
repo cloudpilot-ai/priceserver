@@ -1,0 +1,68 @@
+name: CloudPilot Production Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch or tag used to deploy, branch means pre-production, tag means production"
+        required: true
+        type: string
+        default: "release-1.0"
+      cluster:
+        description: "Cluster used to deploy"
+        required: true
+        type: choice
+        options:
+          - cloudpilot-preproduction
+          - cloudpilot-production
+
+jobs:
+  deploy-pre-production:
+    name: CloudPilot Production Deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+          ref: ${{ inputs.ref }}
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: false
+
+      - name: AWS CLI Init
+        uses: unfor19/install-aws-cli-action@v1
+
+      - name: Config env
+        run: |
+          echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS_AK }}" >> $GITHUB_ENV
+          echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SK }}" >> $GITHUB_ENV
+          echo "AWS_GLOBAL_ACCESS_KEY=${{ secrets.AWS_AK }}" >> $GITHUB_ENV
+          echo "AWS_GLOBAL_SECRET_KEY=${{ secrets.AWS_SK }}" >> $GITHUB_ENV
+          echo "AWS_CN_ACCESS_KEY=${{ secrets.AWS_CN_ACCESS_KEY }}" >> $GITHUB_ENV
+          echo "AWS_CN_SECRET_KEY=${{ secrets.AWS_CN_SECRET_KEY }}" >> $GITHUB_ENV
+          echo "AWS_DEFAULT_REGION=us-east-2" >> $GITHUB_ENV
+
+      - name: Config ECR and kubeconfig
+        run: |
+          aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws/cloudpilotai
+          aws eks update-kubeconfig --region us-east-2 --name ${{ inputs.cluster }}
+
+      - uses: ko-build/setup-ko@v0.6
+
+      - name: Build images
+        run: |
+          source hack/env.sh
+
+          export KO_DOCKER_REPO=public.ecr.aws/cloudpilotai/priceserver
+          PRICESERVER_IMAGE_REF=$(ko build --bare github.com/cloudpilot-ai/priceserver/cmd --tags ${{ inputs.ref }})
+
+          echo "PRICESERVER_IMAGE_REF=$PRICESERVER_IMAGE_REF" >> $GITHUB_ENV
+
+      - name: Install components
+        run: |    
+          export TARGET_CLUSTER=${{ inputs.cluster }}
+          
+          ./hack/config-init-pro.sh
+          ko apply -Rf config-pro
