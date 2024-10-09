@@ -7,11 +7,11 @@ import (
 )
 
 func main() {
-	c, err := tools.NewQueryClient("https://pre-price.cloudpilot.ai", "")
+	c, err := tools.NewQueryClient("https://pre-price.cloudpilot.ai", "alibabacloud", "cn-beijing")
 	if err != nil {
 		panic(err)
 	}
 
-	d := c.GetInstanceDetails("us-east-2", "t2.xlarge")
+	d := c.ListInstancesDetails("cn-beijing")
 	fmt.Println(d)
 }
