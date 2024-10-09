@@ -44,13 +44,10 @@ spec:
             httpGet:
               path: /healthz
               port: 8080
-            initialDelaySeconds: 100
+            initialDelaySeconds: 80
             periodSeconds: 3
           resources:
             requests:
-              cpu: 250m
-              memory: 300Mi
-            limits:
               cpu: 250m
               memory: 300Mi
       terminationGracePeriodSeconds: 30
