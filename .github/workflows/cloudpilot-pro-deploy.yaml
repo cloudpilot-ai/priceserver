@@ -44,6 +44,8 @@ jobs:
           echo "AWS_CN_SECRET_KEY=${{ secrets.AWS_CN_SECRET_KEY }}" >> $GITHUB_ENV
           echo "AWS_DEFAULT_REGION=us-east-2" >> $GITHUB_ENV
 
+          echo "ALIBABACLOUD_AKSK_POOL=${{ secrets.ALIBABACLOUD_AKSK_POOL }}" >> $GITHUB_ENV
+
       - name: Config ECR and kubeconfig
         run: |
           aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws/cloudpilotai
