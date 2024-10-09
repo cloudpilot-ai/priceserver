@@ -17,6 +17,7 @@ import (
 
 type QueryClientInterface interface {
 	Run(ctx context.Context)
+	ListRegions() []string
 	ListInstancesDetails(region string) *apis.RegionalInstancePrice
 	GetInstanceDetails(region, instanceType string) *apis.InstanceTypePrice
 	TriggerRefreshData()
@@ -161,6 +162,17 @@ func (q *QueryClientImpl) refreshData() error {
 	}
 
 	return nil
+}
+
+func (q *QueryClientImpl) ListRegions() []string {
+	q.awsMutex.Lock()
+	defer q.awsMutex.Unlock()
+
+	var ret []string
+	for region := range q.priceData {
+		ret = append(ret, region)
+	}
+	return ret
 }
 
 func (q *QueryClientImpl) ListInstancesDetails(region string) *apis.RegionalInstancePrice {
