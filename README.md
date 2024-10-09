@@ -44,6 +44,8 @@ export AWS_GLOBAL_ACCESS_KEY=<aws access key>
 export AWS_GLOBAL_SECRET_KEY=<aws secret>
 export AWS_CN_ACCESS_KEY=<aws cn access key>
 export AWS_CN_SECRET_KEY=<aws cn secret key>
+# The format should be like <ak1>:<sk1>,<ak2>:<sk2>
+export ALIBABACLOUD_AKSK_POOL=<alibaba cloud access key and secret key pair pool>
 
 source hack/env.sh
 hack/config-init-dev.sh
