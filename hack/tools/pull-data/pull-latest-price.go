@@ -6,7 +6,6 @@ import (
 
 	"github.com/cloudpilot-ai/priceserver/pkg/apis"
 	"github.com/cloudpilot-ai/priceserver/pkg/client"
-	"github.com/cloudpilot-ai/priceserver/pkg/tools"
 )
 
 func handleAWSData() error {
@@ -36,7 +35,7 @@ func handleAWSData() error {
 }
 
 func handleAlibabaCloudData() error {
-	alibabaCloudAKSKPool := tools.ExtractAlibabaCloudAKSKPool()
+	alibabaCloudAKSKPool := client.ExtractAlibabaCloudAKSKPool()
 
 	alibabaCloudClient, err := client.NewAlibabaCloudPriceClient(alibabaCloudAKSKPool, false)
 	if err != nil {
