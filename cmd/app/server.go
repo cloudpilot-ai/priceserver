@@ -3,8 +3,10 @@ package app
 import (
 	"context"
 	"flag"
+	"time"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/sync/errgroup"
 	cliflag "k8s.io/component-base/cli/flag"
 	"k8s.io/klog"
 
@@ -42,15 +44,28 @@ func NewPriceServerCommand(ctx context.Context) *cobra.Command {
 
 func run(ctx context.Context, opts *options.Options) error {
 	klog.Infof("Start cloudpilot-agent, version: %s, commit: %s...", version.Get().GitVersion, version.Get().GitCommit)
+	var (
+		awsPriceClient     *client.AWSPriceClient
+		alibabaCloudClient *client.AlibabaCloudPriceClient
+	)
 
-	awsPriceClient, err := client.NewAWSPriceClient(opts.AWSGlobalAK, opts.AWSGlobalSK, opts.AWSCNAK, opts.AWSCNSK, true)
-	if err != nil {
+	timeStart := time.Now()
+	eg, ctx := errgroup.WithContext(ctx)
+	eg.Go(func() (err error) {
+		alibabaCloudClient, err = client.NewAlibabaCloudPriceClient(opts.AlibabaCloudAKSKPool, true)
+		return err
+	})
+
+	eg.Go(func() (err error) {
+		awsPriceClient, err = client.NewAWSPriceClient(opts.AWSGlobalAK, opts.AWSGlobalSK, opts.AWSCNAK, opts.AWSCNSK, true)
+		return err
+	})
+
+	if err := eg.Wait(); err != nil {
 		return err
 	}
-	alibabaCloudClient, err := client.NewAlibabaCloudPriceClient(opts.AlibabaCloudAKSKPool, true)
-	if err != nil {
-		return err
-	}
+
+	klog.Infof("Init price client cost: %v", time.Since(timeStart))
 
 	serverRouter := router.NewPriceServerRouter(awsPriceClient, alibabaCloudClient)
 

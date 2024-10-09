@@ -17,7 +17,9 @@ require (
 	github.com/gin-gonic/gin v1.10.0
 	github.com/samber/lo v1.47.0
 	github.com/spf13/cobra v1.8.0
+	golang.org/x/sync v0.7.0
 	k8s.io/apiserver v0.29.3
+	k8s.io/client-go v0.29.3
 	k8s.io/component-base v0.29.3
 	k8s.io/klog v1.0.0
 )
@@ -129,7 +131,6 @@ require (
 	golang.org/x/exp v0.0.0-20220722155223-a9213eeb770e // indirect
 	golang.org/x/net v0.25.0 // indirect
 	golang.org/x/oauth2 v0.10.0 // indirect
-	golang.org/x/sync v0.7.0 // indirect
 	golang.org/x/sys v0.20.0 // indirect
 	golang.org/x/term v0.20.0 // indirect
 	golang.org/x/text v0.16.0 // indirect
@@ -146,7 +147,6 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/api v0.29.3 // indirect
 	k8s.io/apimachinery v0.29.3 // indirect
-	k8s.io/client-go v0.29.3 // indirect
 	k8s.io/klog/v2 v2.120.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20240228011516-70dd3763d340 // indirect
 	k8s.io/utils v0.0.0-20230726121419-3b25d923346b // indirect

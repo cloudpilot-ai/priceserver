@@ -21,6 +21,7 @@ import (
 	util "github.com/alibabacloud-go/tea-utils/v2/service"
 	"github.com/alibabacloud-go/tea/tea"
 	"github.com/samber/lo"
+	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
 
 	"github.com/cloudpilot-ai/priceserver/pkg/apis"
@@ -142,62 +143,82 @@ func getSpotPrice(client *ecsclient.Client, region, instanceType string) (map[st
 	return ret, nil
 }
 
+type RegionalSpotInstancePrice struct {
+	Region        string                              `json:"region"`
+	InstanceTypes *map[string]*apis.InstanceTypePrice `json:"instanceTypes"`
+}
+
+type RegionalSpotInstancePriceSplit struct {
+	Region       string                  `json:"region"`
+	InstanceType string                  `json:"instanceType"`
+	Info         *apis.InstanceTypePrice `json:"info"`
+}
+
 func (a *AlibabaCloudPriceClient) refreshSpotPrice() {
-	instanceTypesMap := map[string]map[string]*apis.InstanceTypePrice{}
-	var instanceTypesMapMux sync.Mutex
+	rsiPrices := make([]*RegionalSpotInstancePrice, len(a.regionList))
 
-	instanceTypesMapHandleFunc := func(paras ...interface{}) {
-		region := paras[0].(string)
-		instanceTypes, err := a.listInstanceTypes(region)
+	workqueue.ParallelizeUntil(context.Background(), 50, len(a.regionList), func(i int) {
+		instanceTypes, err := a.listInstanceTypes(a.regionList[i])
 		if err != nil {
+			klog.Errorf("Failed to list instance types in region %s:%v", a.regionList[i], err)
 			return
 		}
-		instanceTypesMapMux.Lock()
-		instanceTypesMap[region] = instanceTypes
-		instanceTypesMapMux.Unlock()
+
+		rsiPrices[i] = &RegionalSpotInstancePrice{
+			Region:        a.regionList[i],
+			InstanceTypes: &instanceTypes,
+		}
+	})
+
+	n := 0
+	for i := range rsiPrices {
+		if rsiPrices[i] != nil {
+			n += len(*rsiPrices[i].InstanceTypes)
+		}
 	}
 
-	instanceTypesTask := tools.NewParallelTask(instanceTypesMapHandleFunc)
-	for _, region := range a.regionList {
-		instanceTypesTask.Add([]interface{}{region})
+	rsiPricess := make([]RegionalSpotInstancePriceSplit, 0, n)
+	for i := range rsiPrices {
+		if rsiPrices[i] != nil {
+			for instanceType, info := range *rsiPrices[i].InstanceTypes {
+				rsiPricess = append(rsiPricess, RegionalSpotInstancePriceSplit{
+					Region:       rsiPrices[i].Region,
+					InstanceType: instanceType,
+					Info:         info,
+				})
+			}
+		}
 	}
-	instanceTypesTask.Process()
 
-	priceHandleFunc := func(paras ...interface{}) {
-		region := paras[0].(string)
-		client := paras[1].(*ecsclient.Client)
-		info := paras[2].(*apis.InstanceTypePrice)
-		instanceType := paras[3].(string)
-		spotPrice, err := getSpotPrice(client, region, instanceType)
+	workqueue.ParallelizeUntil(context.Background(), 50, n, func(i int) {
+		client, err := a.createECSClient(rsiPricess[i].Region)
 		if err != nil {
+			klog.Errorf("Failed to create ECS client in region %s:%v", rsiPricess[i].Region, err)
 			return
 		}
-		info.SpotPricePerHour = spotPrice
-		a.dataMutex.Lock()
-		if _, ok := a.priceData[region]; !ok {
-			a.priceData[region] = &apis.RegionalInstancePrice{
+
+		spotPrice, err := getSpotPrice(client, rsiPricess[i].Region, rsiPricess[i].InstanceType)
+		if err != nil {
+			klog.Errorf("Failed to get spot price in region %s:%v", rsiPricess[i].Region, err)
+			return
+		}
+
+		rsiPricess[i].Info.SpotPricePerHour = spotPrice
+	})
+
+	a.dataMutex.Lock()
+	defer a.dataMutex.Unlock()
+	for i := range rsiPricess {
+		if _, ok := a.priceData[rsiPricess[i].Region]; !ok {
+			a.priceData[rsiPricess[i].Region] = &apis.RegionalInstancePrice{
 				InstanceTypePrices: map[string]*apis.InstanceTypePrice{},
 			}
 		}
-		if _, ok := a.priceData[region].InstanceTypePrices[instanceType]; ok {
-			info.OnDemandPricePerHour = a.priceData[region].InstanceTypePrices[instanceType].OnDemandPricePerHour
+		if _, ok := a.priceData[rsiPricess[i].Region].InstanceTypePrices[rsiPricess[i].InstanceType]; ok {
+			rsiPricess[i].Info.OnDemandPricePerHour = a.priceData[rsiPricess[i].Region].InstanceTypePrices[rsiPricess[i].InstanceType].OnDemandPricePerHour
 		}
-		a.priceData[region].InstanceTypePrices[instanceType] = info
-		a.dataMutex.Unlock()
+		a.priceData[rsiPricess[i].Region].InstanceTypePrices[rsiPricess[i].InstanceType] = rsiPricess[i].Info
 	}
-
-	priceTask := tools.NewParallelTask(priceHandleFunc)
-	for region, instanceTypes := range instanceTypesMap {
-		client, err := a.createECSClient(region)
-		if err != nil {
-			continue
-		}
-		klog.Infof("Start to handle region %s spot price", region)
-		for instanceType, info := range instanceTypes {
-			priceTask.Add([]interface{}{region, client, info, instanceType})
-		}
-	}
-	priceTask.Process()
 
 	klog.Infof("All spot prices are refreshed for AlibabaCloud")
 }
