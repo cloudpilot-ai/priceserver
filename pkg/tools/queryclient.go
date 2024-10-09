@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"sync"
 	"time"
 
@@ -22,21 +23,45 @@ type QueryClientInterface interface {
 }
 
 type QueryClientImpl struct {
-	region      string
-	awsEndpoint string
+	region       string
+	queryBaseUrl string
 
 	triggerChannel chan struct{}
 
-	awsMutex     sync.Mutex
-	awsPriceData map[string]*apis.RegionalInstancePrice
+	awsMutex  sync.Mutex
+	priceData map[string]*apis.RegionalInstancePrice
 }
 
-func NewQueryClient(awsEndpoint, region string) (QueryClientInterface, error) {
+const (
+	AlibabaCloudProvider = "alibabacloud"
+	AWSCloudProvider     = "aws"
+)
+
+func NewQueryClient(endpoint, cloudProvider, region string) (QueryClientInterface, error) {
+	var (
+		err          error
+		queryBaseUrl string
+	)
+	switch cloudProvider {
+	case AWSCloudProvider:
+		queryBaseUrl, err = url.JoinPath(endpoint, "/api/v1/aws/ec2")
+		if err != nil {
+			return nil, err
+		}
+	case AlibabaCloudProvider:
+		queryBaseUrl, err = url.JoinPath(endpoint, "/api/v1/alibabacloud/ecs")
+		if err != nil {
+			return nil, err
+		}
+	default:
+		return nil, fmt.Errorf("unsupported cloud provider: %s", cloudProvider)
+	}
+
 	ret := &QueryClientImpl{
 		region:         region,
-		awsEndpoint:    awsEndpoint,
+		queryBaseUrl:   queryBaseUrl,
 		triggerChannel: make(chan struct{}, 100),
-		awsPriceData:   map[string]*apis.RegionalInstancePrice{},
+		priceData:      map[string]*apis.RegionalInstancePrice{},
 	}
 	if err := ret.refreshData(); err != nil {
 		return nil, err
@@ -62,7 +87,7 @@ func (q *QueryClientImpl) Run(ctx context.Context) {
 }
 
 func (q *QueryClientImpl) refreshSpecificInstanceTypeData(region, instanceType string) *apis.InstanceTypePrice {
-	url := fmt.Sprintf("%s/api/v1/aws/ec2/regions/%s/types/%s/price", q.awsEndpoint, region, instanceType)
+	url := fmt.Sprintf("%s/regions/%s/types/%s/price", q.queryBaseUrl, region, instanceType)
 
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
@@ -93,15 +118,15 @@ func (q *QueryClientImpl) refreshSpecificInstanceTypeData(region, instanceType s
 		klog.Errorf("Failed to unmarshal price data: %v", err)
 		return nil
 	}
-	q.awsPriceData[region].InstanceTypePrices[instanceType] = &price
+	q.priceData[region].InstanceTypePrices[instanceType] = &price
 
 	return &price
 }
 
 func (q *QueryClientImpl) refreshData() error {
-	url := fmt.Sprintf("%s/api/v1/aws/ec2/price", q.awsEndpoint)
+	url := fmt.Sprintf("%s/price", q.queryBaseUrl)
 	if q.region != "" {
-		url = fmt.Sprintf("%s/api/v1/aws/ec2/regions/%s/price", q.awsEndpoint, q.region)
+		url = fmt.Sprintf("%s/regions/%s/price", q.queryBaseUrl, q.region)
 	}
 
 	req, err := http.NewRequest(http.MethodGet, url, nil)
@@ -129,7 +154,7 @@ func (q *QueryClientImpl) refreshData() error {
 
 	q.awsMutex.Lock()
 	defer q.awsMutex.Unlock()
-	err = json.Unmarshal(data, &q.awsPriceData)
+	err = json.Unmarshal(data, &q.priceData)
 	if err != nil {
 		klog.Errorf("Failed to unmarshal price data: %v", err)
 		return err
@@ -142,20 +167,20 @@ func (q *QueryClientImpl) ListInstancesDetails(region string) *apis.RegionalInst
 	q.awsMutex.Lock()
 	defer q.awsMutex.Unlock()
 
-	if _, ok := q.awsPriceData[region]; !ok {
+	if _, ok := q.priceData[region]; !ok {
 		return nil
 	}
-	return q.awsPriceData[region].DeepCopy()
+	return q.priceData[region].DeepCopy()
 }
 
 func (q *QueryClientImpl) GetInstanceDetails(region, instanceType string) *apis.InstanceTypePrice {
 	q.awsMutex.Lock()
 	defer q.awsMutex.Unlock()
 
-	if _, ok := q.awsPriceData[region]; !ok {
+	if _, ok := q.priceData[region]; !ok {
 		return nil
 	}
-	ret, ok := q.awsPriceData[region].InstanceTypePrices[instanceType]
+	ret, ok := q.priceData[region].InstanceTypePrices[instanceType]
 	if !ok {
 		return q.refreshSpecificInstanceTypeData(region, instanceType)
 	}
