@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -28,9 +30,36 @@ import (
 //go:embed builtin-data/*.json
 var file embed.FS
 
+type AKSKPair struct {
+	AK string
+	SK string
+}
+
+func ExtractAlibabaCloudAKSKPool() []AKSKPair {
+	akskPool := os.Getenv(apis.AlibabaCloudAKSKPoolEnv)
+	if akskPool == "" {
+		return nil
+	}
+
+	akskPair := []AKSKPair{}
+	for _, aksk := range strings.Split(akskPool, ",") {
+		aksk = strings.TrimSpace(aksk)
+		if aksk == "" {
+			continue
+		}
+		akskArray := strings.Split(aksk, ":")
+		if len(akskArray) != 2 {
+			continue
+		}
+
+		akskPair = append(akskPair, AKSKPair{AK: akskArray[0], SK: akskArray[1]})
+	}
+
+	return akskPair
+}
+
 type AlibabaCloudPriceClient struct {
-	// akskPool maps from ak to sk
-	akskPool map[string]string
+	akskPool []AKSKPair
 
 	regionList []string
 
@@ -38,7 +67,7 @@ type AlibabaCloudPriceClient struct {
 	priceData map[string]*apis.RegionalInstancePrice
 }
 
-func NewAlibabaCloudPriceClient(akskPool map[string]string, initialSpotUpdate bool) (*AlibabaCloudPriceClient, error) {
+func NewAlibabaCloudPriceClient(akskPool []AKSKPair, initialSpotUpdate bool) (*AlibabaCloudPriceClient, error) {
 	data, err := file.ReadFile("builtin-data/alibabacloud_price.json")
 	if err != nil {
 		return nil, err
@@ -146,10 +175,12 @@ func (a *AlibabaCloudPriceClient) refreshSpotPrice() {
 		info.SpotPricePerHour = spotPrice
 		a.dataMutex.Lock()
 		if _, ok := a.priceData[region]; !ok {
-			a.priceData[region] = &apis.RegionalInstancePrice{}
+			a.priceData[region] = &apis.RegionalInstancePrice{
+				InstanceTypePrices: map[string]*apis.InstanceTypePrice{},
+			}
 		}
-		if _, ok := a.priceData[region].InstanceTypePrices[instanceType]; !ok {
-			a.priceData[region].InstanceTypePrices = map[string]*apis.InstanceTypePrice{}
+		if _, ok := a.priceData[region].InstanceTypePrices[instanceType]; ok {
+			info.OnDemandPricePerHour = a.priceData[region].InstanceTypePrices[instanceType].OnDemandPricePerHour
 		}
 		a.priceData[region].InstanceTypePrices[instanceType] = info
 		a.dataMutex.Unlock()
@@ -397,21 +428,20 @@ func (a *AlibabaCloudPriceClient) initialRegions() error {
 }
 
 func (a *AlibabaCloudPriceClient) createECSClient(region string) (*ecsclient.Client, error) {
-	for ak, sk := range a.akskPool {
-		config := &openapi.Config{
-			AccessKeyId:     tea.String(ak),
-			AccessKeySecret: tea.String(sk),
-			RegionId:        tea.String(region),
-		}
-		client, err := ecsclient.NewClient(config)
-		if err != nil {
-			klog.Errorf("Failed to create ecs client:%v", err)
-			return nil, err
-		}
-		return client, nil
+	// Take one ak/sk from pool
+	pick := rand.Intn(len(a.akskPool))
+	ak, sk := a.akskPool[pick].AK, a.akskPool[pick].SK
+	config := &openapi.Config{
+		AccessKeyId:     tea.String(ak),
+		AccessKeySecret: tea.String(sk),
+		RegionId:        tea.String(region),
 	}
-
-	return nil, fmt.Errorf("failed to create ecs client")
+	client, err := ecsclient.NewClient(config)
+	if err != nil {
+		klog.Errorf("Failed to create ecs client:%v", err)
+		return nil, err
+	}
+	return client, nil
 }
 
 func (a *AlibabaCloudPriceClient) ListRegionsInstancesPrice() map[string]*apis.RegionalInstancePrice {

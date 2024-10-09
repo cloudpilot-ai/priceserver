@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/cloudpilot-ai/priceserver/pkg/apis"
-	"github.com/cloudpilot-ai/priceserver/pkg/tools"
+	"github.com/cloudpilot-ai/priceserver/pkg/client"
 )
 
 type Options struct {
@@ -14,7 +14,7 @@ type Options struct {
 	AWSCNAK     string
 	AWSCNSK     string
 
-	AlibabaCloudAKSKPool map[string]string
+	AlibabaCloudAKSKPool []client.AKSKPair
 }
 
 func NewOptions() *Options {
@@ -38,7 +38,7 @@ func (o *Options) ApplyAndValidate() error {
 	if o.AWSCNSK == "" {
 		return fmt.Errorf("aws china secret key is not set")
 	}
-	o.AlibabaCloudAKSKPool = tools.ExtractAlibabaCloudAKSKPool()
+	o.AlibabaCloudAKSKPool = client.ExtractAlibabaCloudAKSKPool()
 	if len(o.AlibabaCloudAKSKPool) == 0 {
 		return fmt.Errorf("alibaba cloud access key and secret key pool is not set")
 	}
