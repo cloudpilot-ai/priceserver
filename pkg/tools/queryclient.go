@@ -16,18 +16,21 @@ import (
 )
 
 type QueryClientInterface interface {
+	// Run is used to sync the data periodically
 	Run(ctx context.Context)
+	// Sync is used to sync the data manually if want to work with your own scheduling mechanism
+	Sync() error
+	// ListRegions returns a list of the supported regions
 	ListRegions() []string
+	// ListInstancesDetails returns the details of the supported instances in one region
 	ListInstancesDetails(region string) *apis.RegionalInstancePrice
+	// GetInstanceDetails returns the details of the specified instance
 	GetInstanceDetails(region, instanceType string) *apis.InstanceTypePrice
-	TriggerRefreshData()
 }
 
 type QueryClientImpl struct {
 	region       string
 	queryBaseUrl string
-
-	triggerChannel chan struct{}
 
 	awsMutex  sync.Mutex
 	priceData map[string]*apis.RegionalInstancePrice
@@ -59,12 +62,11 @@ func NewQueryClient(endpoint, cloudProvider, region string) (QueryClientInterfac
 	}
 
 	ret := &QueryClientImpl{
-		region:         region,
-		queryBaseUrl:   queryBaseUrl,
-		triggerChannel: make(chan struct{}, 100),
-		priceData:      map[string]*apis.RegionalInstancePrice{},
+		region:       region,
+		queryBaseUrl: queryBaseUrl,
+		priceData:    map[string]*apis.RegionalInstancePrice{},
 	}
-	if err := ret.refreshData(); err != nil {
+	if err := ret.Sync(); err != nil {
 		return nil, err
 	}
 
@@ -79,10 +81,8 @@ func (q *QueryClientImpl) Run(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case <-q.triggerChannel:
-			_ = q.refreshData()
 		case <-ticker.C:
-			_ = q.refreshData()
+			_ = q.Sync()
 		}
 	}
 }
@@ -124,7 +124,7 @@ func (q *QueryClientImpl) refreshSpecificInstanceTypeData(region, instanceType s
 	return &price
 }
 
-func (q *QueryClientImpl) refreshData() error {
+func (q *QueryClientImpl) Sync() error {
 	url := fmt.Sprintf("%s/price", q.queryBaseUrl)
 	if q.region != "" {
 		url = fmt.Sprintf("%s/regions/%s/price", q.queryBaseUrl, q.region)
@@ -197,8 +197,4 @@ func (q *QueryClientImpl) GetInstanceDetails(region, instanceType string) *apis.
 		return q.refreshSpecificInstanceTypeData(region, instanceType)
 	}
 	return ret
-}
-
-func (q *QueryClientImpl) TriggerRefreshData() {
-	q.triggerChannel <- struct{}{}
 }
