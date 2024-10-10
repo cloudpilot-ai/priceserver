@@ -2,6 +2,7 @@ package router
 
 import (
 	"github.com/gin-contrib/cors"
+	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
 
 	"github.com/cloudpilot-ai/priceserver/pkg/apis"
@@ -17,6 +18,8 @@ func NewPriceServerRouter(awsPriceClient *client.AWSPriceClient, alibabaCloudCli
 	config.AllowHeaders = []string{"*"}
 	corsHandler := cors.New(config)
 	router.Use(corsHandler)
+
+	router.Use(gzip.Gzip(gzip.DefaultCompression))
 
 	router.Use(func(context *gin.Context) {
 		context.Set(apis.AWSPriceClientContextKey, awsPriceClient)

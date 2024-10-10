@@ -14,6 +14,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/pricing v1.28.7
 	github.com/aws/aws-sdk-go-v2/service/savingsplans v1.21.1
 	github.com/gin-contrib/cors v1.7.2
+	github.com/gin-contrib/gzip v1.0.1
 	github.com/gin-gonic/gin v1.10.0
 	github.com/samber/lo v1.47.0
 	github.com/spf13/cobra v1.8.0

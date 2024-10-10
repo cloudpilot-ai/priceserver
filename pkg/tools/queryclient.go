@@ -95,6 +95,8 @@ func (q *QueryClientImpl) refreshSpecificInstanceTypeData(region, instanceType s
 		klog.Errorf("Failed to create request: %v", err)
 		return nil
 	}
+	req.Header.Add("Accept", "Accept-Encoding: gzip")
+
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		klog.Errorf("Failed to get price data: %v", err)
@@ -135,6 +137,9 @@ func (q *QueryClientImpl) Sync() error {
 		klog.Errorf("Failed to create request: %v", err)
 		return err
 	}
+	// Use gzip to compress the response
+	req.Header.Add("Accept", "Accept-Encoding: gzip")
+
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		klog.Errorf("Failed to get price data: %v", err)
