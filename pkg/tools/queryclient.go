@@ -187,6 +187,7 @@ func (q *QueryClientImpl) ListInstancesDetails(region string) *apis.RegionalInst
 	if _, ok := q.priceData[region]; !ok {
 		return nil
 	}
+
 	return q.priceData[region].DeepCopy()
 }
 

@@ -744,6 +744,8 @@ func (a *AWSPriceClient) ListRegionsInstancesPrice() map[string]*apis.RegionalIn
 	ret := make(map[string]*apis.RegionalInstancePrice)
 	for k, v := range a.priceData {
 		ret[k] = v.DeepCopy()
+		// TODO: this line is used to ensure the api compatibility, we should remove this line in the future
+		ret[k].InstanceTypeEC2Price = ret[k].InstanceTypePrices
 	}
 	return ret
 }
@@ -756,9 +758,16 @@ func (a *AWSPriceClient) ListInstancesPrice(region string) *map[string]apis.Regi
 	if !ok {
 		return nil
 	}
-	return &map[string]apis.RegionalInstancePrice{
-		region: *d.DeepCopy(),
+
+	regionData := d.DeepCopy()
+	// TODO: this line is used to ensure the api compatibility, we should remove this line in the future
+	regionData.InstanceTypeEC2Price = regionData.InstanceTypePrices
+
+	ret := map[string]apis.RegionalInstancePrice{
+		region: *regionData,
 	}
+
+	return &ret
 }
 
 func (a *AWSPriceClient) GetInstancePrice(region, instanceType string) *apis.InstanceTypePrice {
