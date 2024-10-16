@@ -7,6 +7,8 @@ type RegionTypeKey struct {
 
 type RegionalInstancePrice struct {
 	InstanceTypePrices map[string]*InstanceTypePrice `json:"instanceTypePrices"`
+	// TODO: delete this field when all the customer upgrades the components
+	InstanceTypeEC2Price map[string]*InstanceTypePrice `json:"instanceTypeEC2Price"`
 }
 
 type InstanceTypePrice struct {
